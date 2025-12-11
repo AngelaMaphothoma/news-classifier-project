@@ -1,0 +1,60 @@
+services:
+  # FastAPI Backend Service
+  api:
+    build:
+      context: .
+      dockerfile: docker/app.Dockerfile
+    container_name: news-classifier-api
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./app:/app/app
+      - ./data:/app/data
+      - ./chroma_db:/app/chroma_db
+    environment:
+      - PYTHONPATH=/app
+      - PYTHONUNBUFFERED=1
+      - CHROMA_DB_PATH=/app/chroma_db
+    restart: unless-stopped
+    networks:
+      - news-network
+    healthcheck:
+      test: ["CMD", "python", "-c", "import requests; r = requests.get('http://localhost:8000/health'); exit(0 if r.status_code == 200 else 1)"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+
+  # Streamlit Frontend Service
+  streamlit:
+    build:
+      context: .
+      dockerfile: docker/streamlit.Dockerfile
+    container_name: news-classifier-ui
+    ports:
+      - "8501:8501"
+    volumes:
+      - ./app:/app/app
+      - ./streamlit_ui:/app/streamlit_ui
+      - ./data:/app/data
+    environment:
+      - PYTHONPATH=/app
+      - PYTHONUNBUFFERED=1
+      - API_BASE_URL=http://api:8000
+      - STREAMLIT_SERVER_PORT=8501
+      - STREAMLIT_SERVER_ADDRESS=0.0.0.0
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - news-network
+
+networks:
+  news-network:
+    driver: bridge
+    name: news-classifier-network
+
+volumes:
+  chroma_data:
+    name: news-chroma-data
